@@ -1,0 +1,1 @@
+<p>Games played: 23</p>	<table class="table table-striped table-condensed tablesorter">		<thead>		<tr>			<th>#</th>			<th>Player</th>			<th>Points</th>			<th>Games</th>			<th>League</th>			<th>PPG</th>			<th>1st%</th>			<th>2nd%</th>			<th>3rd%</th>			<th>4th%</th>			<th>Avg</th>		</tr>		</thead>		<tbody></tbody></table>2013/01/01 19:00:03
