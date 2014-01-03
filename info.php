@@ -1,14 +1,5 @@
 <pre>This is Yazphier's working copy of the WAML webpage
 
-Special notes to puppi:
-----------------------
-  * Noticed some differences in score, (should we care?)
-    * During season 0 - i've checked and it's due to you only counting NoNames placed better than player.
-    * During season 1 - Am not sure, did u use same method as season 0? Could be as I handle NoNames and Banned equally.
-  * Season 2, player 357 should be in C-league?, no matter, player stopped play anyway.
-  * Everything is now VERY postgresql, might need a day or so just to make proper mysql queries.
-  * Where should upload this, ie. have i write access to the svn?
-
 Things done: * done, - todo, ? dunno
 ------------------------------------
 >> League (standings)
