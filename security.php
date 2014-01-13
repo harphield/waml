@@ -1,1 +1,1 @@
-<?php// no, really not a secure way of doing stuff$isadmin = ($_SERVER['REMOTE_ADDR'] == $_SERVER['SERVER_ADDR']);$isadmin = false;?>
+<?php// no, really not a secure way of doing stuff$isadmin = ($_SERVER['REMOTE_ADDR'] == $_SERVER['SERVER_ADDR']);//$isadmin = false;?>

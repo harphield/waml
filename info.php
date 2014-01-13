@@ -2,13 +2,16 @@
 
 Things done: * done, - todo, ? dunno
 ------------------------------------
+>> Users
+  - possibility to merge users, probably create a new table of 'users' that
+    can be linked to multiple 'players' and let stats and such be of users instead of players..
+
 >> League (standings)
   * content gathered from db.
   * content precalculated by cron
   * link to player info
-  - no 'full list' for a season, only per league
+  * 'full list' for a season
   - thropies
-  - add season 3 (not coding, is functional in leagues list)
  
 >> Games list
   * content gathered from db on the fly
@@ -66,4 +69,7 @@ Things done: * done, - todo, ? dunno
 >> Database
   - reorganize and clean (again)
   - make it mysql compatible
+
+>> Bugs
+  - When banning NoName season 3, scores was not updated properly, deleting all games in yseasongames solved it for now.., problem from before doing the actual ban
 </pre>

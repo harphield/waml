@@ -36,11 +36,22 @@ CREATE TABLE IF NOT EXISTS yplayers (
   PRIMARY KEY  (pid)
 );
 
+//senechals requiest for merging users
+// dpid = for getting name
+CREATE TABLE IF NOT EXISTS users ( 
+  uid int NOT NULL,
+  pid int NOT NULL,
+  dpid BOOL DEFAULT true,
+//  PRIMARY KEY(pid)
+);
+
+ALTER TABLE yusers
+
 */ 
 
 // legend for nonverbose mode
 if (!$verbose) {
-  echo '<p>legend: * : game, N : new player, . : player, ! : game already submitted';
+  echo '<p>legend: * : game, N : new player, . : player, ! : game already submitted<br>';
 }
 
 // clean db part games etc.
@@ -69,6 +80,8 @@ if ($stmt->rowcount() == 0) {
 }
 //var_dump($readlogs);
 // this should be gathered from db
+//# game record sync (tenhou updates (purportedly) at :00,:20,:40 
+//               every hour)
 $path = 'http://arcturus.su/tenhou/gamerecords2/all/sca';
 //$path = 'sca';
 $lobbies = array(
@@ -79,14 +92,15 @@ $lobbies = array(
 
 
 // create an array with dates to work with
-// allow 1 hour for file to pop up
+// // allow 1 hour for file to pop up
 //while ((end($days) < time()-1*60*60) & (count($days) < 2)) array_push($days, end($days)+24*60*60);
 while ((strtotime(end($days)) < time()-25*60*60) && (count($days) < 4)) array_push($days, date('Ymd',strtotime(end($days))+24*60*60));
 
+error_log("\n======Cron:======",3,'./cronlog');
 // populate the database
 foreach ($days as $day) {
 //  $day = date('Ymd', $day);
-  echo '<P> [' . date('Y-m-d H:i:sP',time()) . '] Scanning logs: ' . $day . '<BR>';
+  error_log("\n".'['.date('Y-m-d H:i:sP',time()).'] Scanning logs: '.$day."\n",3,'./cronlog');
 
   $f = @gzopen($path . $day . '.log.gz', 'rb');
   if ($f) {
@@ -94,16 +108,17 @@ foreach ($days as $day) {
     $hash = hash_file('crc32',$path . $day . '.log.gz');
     // cancel this day if hash is equal
     if (($hash == $readlogs['hash']) && ($day == $readlogs['date'])) {
-      echo 'hash equal(' . $hash . ') games: '. $readlogs['nrgames'];
+      error_log('hash equal(' . $hash . ') games: '. $readlogs['nrgames'],3,'./cronlog');
       continue;
     } else {
-      if ($hash == $readlogs['hash']) echo 'hash unequal (' . $hash . ') vs (' . $readlogs['hash'] . ') - ' . $readlogs['nrgames'] . ' old games <B>WARNING, code not done</B> (this is normal if first run)<BR>';
+      if ($hash == $readlogs['hash']) error_log('hash unequal (' . $hash . ') vs (' . $readlogs['hash'] . ') - ' . $readlogs['nrgames'] . ' old games WARNING, code not done (this is normal if first run)'."\n",3,'./cronlog');;
       //we should delete games, or skip games or something
       //running on the assumption that only new games are added at the bottom of the file
     }
 
     // scan file for games to add and update db
     $nrgames = 0;
+    $echo = '';
     while($line = trim(gzgets($f))) {
       // ar:	0 lobby
       //	1 time?
@@ -123,14 +138,14 @@ foreach ($days as $day) {
 
       $gametime = $day .  ' '. $ar[1] . ':00';
 
-      if ($verbose) echo $line .' ' . $gametime . '<br />';
-      else echo '*';
+      if ($verbose) error_log( $line .' ' . $gametime . "\n",3,'./cronlog');
+      else $echo .= '*';
 
       // spec check if we're looking at a record already been checked before
       $nrgames++;
       if (($day == $readlogs['date']) && ($nrgames <= $readlogs['nrgames'])) {
-	if ($verbose) echo 'Game already submitted<BR>';
-	else echo '!';
+	if ($verbose) error_log( 'Game already submitted'."\n",3,'./cronlog');
+	else $echo .= '!';
 	continue;
       }
 
@@ -141,7 +156,7 @@ foreach ($days as $day) {
       $stmt->bindParam(':lobby', $lobby);
       if ($stmt->execute()) $gid = $dbh->lastInsertId('ygames_gid_seq');
       else {
-	echo '<BR>game insert error';
+	error_log( "\nGame insert error",3,'./cronlog');
 	continue;
 //	  die();
       }
@@ -149,7 +164,7 @@ foreach ($days as $day) {
 
       $place = 1;
       foreach ($players as $player) {
-	if (empty($player)) {echo "ERROR: empty player found\n"; continue;}
+	if (empty($player)) {error_log("ERROR: empty player found\n",3,'./cronlog'); continue;}
 	$sc = explode('(', $player); // name(pts)
 	$score = intval(substr(end($sc),0,-1));
 	array_pop($sc); // remove the score, implode again if a '(' in the name
@@ -157,14 +172,21 @@ foreach ($days as $day) {
 
 	$stmt = $dbh->prepare('INSERT INTO yplayers (name) SELECT :name::text WHERE NOT EXISTS(SELECT pid FROM yplayers WHERE name = :name)');
 	$stmt->bindParam(':name', $pname);//, PDO::PARAM_STR, 20);
-	if (!$stmt->execute()) {
-	  echo '<BR>player insert error';
+	if ($stmt->execute()) {
+	  // if new handle, let's just create a new user too
+	  $pid = $dbh->lastInsertId('yplayers_pid_seq');
+	  $stmt = $dbh->prepare('INSERT INTO users (uid,pid) VALUES (:uid,:pid)');
+	  $stmt->bindParam(':uid', $pid);
+	  $stmt->bindParam(':pid', $pid);
+	  $stmt->execute();
+	} else {
+	  error_log( "\nPlayer insert error",3,'./cronlog');
 	  continue;
 //	    die();
 	}
 	if ($stmt->rowcount() > 0)
-	  if ($verbose) echo 'New player ';
-	  else echo 'N';
+	  if ($verbose) error_log( 'New player ',3,'./cronlog');
+	  else $echo .= 'N';
 
 	$stmt = $dbh->prepare('INSERT INTO ygames_players (gid, pid, real_points, placement) VALUES (:gid, (SELECT pid FROM yplayers WHERE name = :name), :rpoints, :place)');
 	$stmt->bindParam(':gid', $gid);
@@ -172,14 +194,15 @@ foreach ($days as $day) {
 	$stmt->bindParam(':place', $place);
 	$stmt->bindParam(':rpoints', $score);
 	if (!$stmt->execute()) {
-	  echo '<BR>games_players insert error';
+	  error_log( "\nGames players insert error",3,'./cronlog');
 	  continue;
 	}
 
-	if ($verbose) echo $pname .' - '. $score . "<br>";
-	else echo '.';
+	if ($verbose) error_log( $pname .' - '. $score . "\n",3,'./cronlog');
+	else $echo .= '.';
 	$place++;
       }
+      error_log( $echo,3,'./cronlog');
     } 
 
     // update readlogs
@@ -189,12 +212,13 @@ foreach ($days as $day) {
     $stmt->bindParam(':hash', $hash);
     $stmt->bindParam(':nrgames', $nrgames);
     if (!$stmt->execute()) {
-      echo '<BR>update logs failed';
+      error_log( "\nError updating readlogs",3,'./cronlog');
       continue;
     }    
     gzclose($f);
-  } else echo 'Open file failed';
+  } else error_log( "\nFailed open file",3,'./cronlog');
 }
+
 
 // search if there has been changes affecting any leagues etc.
 /*
@@ -228,6 +252,7 @@ CREATE TABLE IF NOT EXISTS yleagues (
   PRIMARY KEY  (lid) 
 );
 
+// column changed from pid => uid
 CREATE TABLE IF NOT EXISTS yseasonplayers (
   lid integer NOT NULL,
   pid integer NOT NULL,
@@ -235,6 +260,7 @@ CREATE TABLE IF NOT EXISTS yseasonplayers (
   PRIMARY KEY  (lid,pid) 
 );
 
+// column changed from pid => uid
 CREATE TABLE IF NOT EXISTS yseasonscore (
   lid integer NOT NULL,
   pid integer NOT NULL,
@@ -259,20 +285,23 @@ CREATE TABLE IF NOT EXISTS yseasonscore (
 //else $seasons = $stmt->fetchall(); 
 
 //populate yseasongames
-echo '<P>[' . date('Y-m-d H:i:sP',time()) . '] Scanning seasons and leagues<BR>';
+//echo '<P>[' . date('Y-m-d H:i:sP',time()) . '] Scanning seasons and leagues<BR>';
+error_log("\n".'[' . date('Y-m-d H:i:sP',time()) . '] Scanning seasons and leagues'."\n",3,'./cronlog');
+
 $stmt = $dbh->prepare("INSERT INTO yseasongames (sid,gid) (SELECT sid,gid FROM ygames, yseasons WHERE (startdate,enddate) OVERLAPS (gametime,gametime) AND (gid,sid) NOT IN(SELECT gid,sid FROM yseasongames))");
 $stmt->execute();
 
-if ($stmt->rowcount() == 0) echo 'no updated games';
-else echo $stmt->rowcount() . ' games added allocated into seasons, ';
+if ($stmt->rowcount() == 0) error_log('no updated games ',3,'./cronlog');
+  else error_log( $stmt->rowcount() . ' games added allocated into season, ',3,'./cronlog');
 
   // if games has been added, so might players
-  $stmt = $dbh->prepare("INSERT INTO yseasonplayers (lid, pid) (
-    SELECT DISTINCT defaultleague,pid from yseasongames NATURAL JOIN ygames_players NATURAL JOIN yseasons
-      WHERE (sid,pid) NOT IN(SELECT sid,pid FROM yseasonplayers NATURAL JOIN yleagues) AND defaultleague IS NOT NULL)");
+//SENECHALS might need update
+  $stmt = $dbh->prepare("INSERT INTO yseasonplayers (lid, uid) (
+    SELECT DISTINCT defaultleague,uid from yseasongames NATURAL JOIN ygames_players NATURAL JOIN yseasons NATURAL JOIN users
+      WHERE (sid,uid) NOT IN(SELECT sid,uid FROM yseasonplayers NATURAL JOIN yleagues) AND defaultleague IS NOT NULL)");
 //    SELECT DISTINCT lid, pid from yseasongames NATURAL JOIN ygames_players NATURAL JOIN yleagues WHERE (lid,pid) NOT IN(SELECT lid,pid FROM yseasonplayers))");
   @$stmt->execute();
-  echo $stmt->rowcount() . ' new players<BR>';
+  error_log( $stmt->rowcount() . ' new players into seasons'."\n",3,'./cronlog');
 //      SELECT lid,pid FROM yleagues, yplayers WHERE (startdate,enddate) OVERLAPS (gametime,gametime) AND (gid,sid) NOT IN(SELECT gid,sid FROM yseasongames))");
 //SELECT DISTINCT lid, pid from yseasongames natural join ygames_players natural join yleagues;
   //$stmt->execute();
@@ -287,7 +316,7 @@ else echo $stmt->rowcount() . ' games added allocated into seasons, ';
     ygames_players NATURAL JOIN yseasongames GROUP BY sid,gid) AS joint WHERE y.sid=joint.sid AND y.gid=joint.gid AND y.value IS NULL");
 //INSERT INTO yseasonplayers (lid, pid) (SELECT DISTINCT lid, pid from yseasongames NATURAL JOIN ygames_players NATURAL JOIN yleagues WHERE (lid,pid) NOT IN(SELECT lid,pid FROM yseasonplayers))");
   $stmt->execute();
-  echo $stmt->rowcount() . ' updated gamevalues<BR>';
+  error_log( $stmt->rowcount() . ' updated gamevalues'."\n",3,'./cronlog');
 
   $stmt = $dbh->prepare("UPDATE yseasonscore AS y SET
     (scpoints,scgames,scfirst,scsecond,scthird,scfourth,scupdated) =
@@ -301,7 +330,7 @@ else echo $stmt->rowcount() . ' games added allocated into seasons, ';
 	  AND NOT gbanned GROUP BY lid,pid) AS j WHERE y.lid=j.lid AND y.pid=j.pid");
 // forgot join yleagues to not updated (link sid and lid)
   $stmt->execute();
-  echo $stmt->rowcount() . ' scores updated - ';
+  error_log( $stmt->rowcount() . ' scores updated - ',3,'./cronlog');
 
   $stmt = $dbh->prepare("INSERT INTO yseasonscore (lid,pid,scpoints,scgames,scfirst,scsecond,scthird,scfourth,scupdated)
     (SELECT lid,pid, sum(real_points*value+padding) AS score, 
@@ -312,7 +341,13 @@ else echo $stmt->rowcount() . ' games added allocated into seasons, ';
     WHERE (lid,pid) NOT IN (SELECT lid,pid FROM yseasonscore) AND NOT gbanned AND NOT banned
     GROUP BY lid,pid)");
   $stmt->execute();
-  echo $stmt->rowcount() . ' new entries<BR>';
+  error_log( $stmt->rowcount() . ' new entries'."\n",3,'./cronlog');
+
+// echo some logs
+?><pre>
+<?php @include './cronlog'; ?>
+</pre>
+<?php
 
 //INSERT INTO yseasongames (sid,gid) (SELECT gid,sid FROM ygames, yseasons WHERE (startdate,enddate) OVERLAPS (gametime,gametime) AND NOT EXISTS (SELECT sid,gid FROM yseasongames));
 
