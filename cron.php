@@ -3,6 +3,9 @@ require 'db.php';
 date_default_timezone_set('Asia/Tokyo');
 $verbose = false;
 
+echo "cron currently disabled";
+return;
+
 // check database what day has latest been updated
 // recheck that day, if has changes, update
 // do so for all days until current day.
